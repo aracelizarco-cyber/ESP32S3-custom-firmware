@@ -153,7 +153,7 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event) {
             snprintf(topic, sizeof(topic), "%s/schedule/enforce/set", s_base_topic); subscribe(topic, 1);
             const char* keys[] = {"w1_start","w1_end","w2_start","w2_end"};
             for (int i=0;i<4;i++) { snprintf(topic, sizeof(topic), "%s/schedule/%s/set", s_base_topic, keys[i]); subscribe(topic, 1);}            
-snprintf(topic, sizeof(topic), "%s/ota/url/set", s_base_topic); subscribe(topic, 1);
+            snprintf(topic, sizeof(topic), "%s/ota/url/set", s_base_topic); subscribe(topic, 1);
             snprintf(topic, sizeof(topic), "%s/ota/update", s_base_topic); subscribe(topic, 1);
             break; }
         case MQTT_EVENT_DISCONNECTED:
@@ -260,3 +260,40 @@ void ha_mqtt_start(const char* device_name, const char* device_id) {
     esp_mqtt_client_register_event(s_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(s_client);
 }
+
+static void add_device_block(char* out, size_t out_sz) {
+    // Home Assistant device block (long-form keys)
+    snprintf(out, out_sz,
+        "\"device\":{\"identifiers\":[\"%s\"],\"name\":\"%s\",\"manufacturer\":\"ESP\",\"model\":\"ESP32-S3\",\"sw_version\":\"relay_scd41\"}",
+        s_device_id, s_device_name);
+}
+
+static void publish_discovery(void) {
+    char dev[256];
+    add_device_block(dev, sizeof(dev));
+
+    // Relays (switch)
+    for (int ch = 1; ch <= 4; ++ch) {
+        char topic[256];
+        snprintf(topic, sizeof(topic), "%s/switch/%s/relay%d/config", s_ha_prefix, s_device_id, ch);
+
+        char cmd_t[160], stat_t[160];
+        snprintf(cmd_t, sizeof(cmd_t), "%s/relay/%d/set", s_base_topic, ch);
+        snprintf(stat_t, sizeof(stat_t), "%s/relay/%d/state", s_base_topic, ch);
+
+        char payload[768];
+        snprintf(payload, sizeof(payload,
+            "{\"
+            \"name\":\"%s Relay %d\",
+            \"unique_id\":\"%s_relay%d\",
+            \"command_topic\":\"%s\",
+            \"state_topic\":\"%s\",
+            \"availability_topic\":\"%s\",
+            \"payload_available\":\"online\",
+            \"payload_not_available\":\"offline\",\"payload_on\":\"ON\",\"payload_off\":\"OFF\",
+            %s
+            "},
+            s_device_name, ch, s_device_id, ch, cmd_t, stat_t, s_availability_topic, dev);
+        publish(topic, payload, 1, true);
+    }
+    ...
