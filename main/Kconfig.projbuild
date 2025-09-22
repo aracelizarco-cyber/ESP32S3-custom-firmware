@@ -1,0 +1,113 @@
+menu "Application Configuration"
+
+config DEVICE_NAME
+    string "Device name"
+    default "Greenhouse Controller"
+
+menu "Wi-Fi"
+config WIFI_SSID
+    string "Wi-Fi SSID"
+    default ""
+config WIFI_PASSWORD
+    string "Wi-Fi Password"
+    default ""
+endmenu
+
+menu "MQTT"
+config MQTT_BROKER_URI
+    string "MQTT Broker URI (mqtt://host or mqtts://host)"
+    default "mqtt://192.168.1.10"
+config MQTT_USERNAME
+    string "MQTT Username"
+    default ""
+config MQTT_PASSWORD
+    string "MQTT Password"
+    default ""
+config MQTT_BASE_TOPIC
+    string "MQTT Base Topic (prefix)"
+    default "greenhouse"
+config HA_PREFIX
+    string "Home Assistant Discovery Prefix"
+    default "homeassistant"
+endmenu
+
+menu "I2C (SCD4x)"
+config I2C_PORT
+    int "I2C Port"
+    range 0 1
+    default 0
+config I2C_SDA_GPIO
+    int "I2C SDA GPIO"
+    default 4
+config I2C_SCL_GPIO
+    int "I2C SCL GPIO"
+    default 5
+config I2C_CLK_HZ
+    int "I2C Clock (Hz)"
+    default 100000
+endmenu
+
+menu "Time"
+config SNTP_SERVER
+    string "SNTP Server"
+    default "pool.ntp.org"
+config TZ_STRING
+    string "POSIX TZ string (e.g., UTC0 or EST+5EDT,M3.2.0/2,M11.1.0/2)"
+    default "UTC0"
+endmenu
+
+menu "Safety Defaults"
+config SAFETY_AWAY_DEFAULT
+    bool "Away mode default ON"
+    default n
+config SAFETY_SCHEDULE_ENFORCE_DEFAULT
+    bool "Schedule enforcement default ON"
+    default y
+config SAFETY_W1_START_DEFAULT
+    int "Window1 Start (minute-of-day)"
+    range 0 1439
+    default 360  # 06:00
+config SAFETY_W1_END_DEFAULT
+    int "Window1 End (minute-of-day)"
+    range 0 1439
+    default 1320 # 22:00
+config SAFETY_W2_START_DEFAULT
+    int "Window2 Start (minute-of-day)"
+    range 0 1439
+    default 0
+config SAFETY_W2_END_DEFAULT
+    int "Window2 End (minute-of-day)"
+    range 0 1439
+    default 0
+config SAFETY_RELAY1_MAX_ON_MIN_DEFAULT
+    int "Relay1 Max ON (minutes)"
+    range 0 1440
+    default 60
+config SAFETY_RELAY2_MAX_ON_MIN_DEFAULT
+    int "Relay2 Max ON (minutes)"
+    range 0 1440
+    default 60
+config SAFETY_RELAY3_MAX_ON_MIN_DEFAULT
+    int "Relay3 Max ON (minutes)"
+    range 0 1440
+    default 60
+config SAFETY_RELAY4_MAX_ON_MIN_DEFAULT
+    int "Relay4 Max ON (minutes)"
+    range 0 1440
+    default 60
+endmenu
+
+menu "OTA"
+config OTA_DEFAULT_URL
+    string "Default OTA URL"
+    default ""
+config OTA_USE_SERVER_CERT
+    bool "Provide server certificate PEM"
+    default n
+config OTA_SERVER_CERT_PEM
+    string "Server certificate PEM (for HTTPS)"
+    depends on OTA_USE_SERVER_CERT
+    default ""
+endmenu
+
+endmenu

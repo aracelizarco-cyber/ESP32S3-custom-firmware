@@ -11,8 +11,8 @@
 #include <string.h>
 #include <inttypes.h>
 #include <stdlib.h>
-#include <ctype.h>
 #include <strings.h>
+#include <ctype.h>
 
 static const char* TAG = "ha_mqtt";
 
@@ -88,12 +88,14 @@ static void on_command_away(const char* payload, int len) {
     bool on=false; if (!parse_bool(payload, len, &on)) return;
     safety_set_away_mode(on);
     ha_mqtt_publish_away_state(safety_get_away_mode());
+    safety_apply_policy_now();
 }
 
 static void on_command_schedule_enforce(const char* payload, int len) {
     bool on=false; if (!parse_bool(payload, len, &on)) return;
     safety_set_schedule_enforce(on);
     ha_mqtt_publish_schedule_state(safety_get_schedule_enforce());
+    safety_apply_policy_now();
 }
 
 static void on_command_max_on(int channel, const char* payload, int len) {
@@ -118,6 +120,7 @@ static void on_command_window(const char* which, const char* payload, int len) {
 
     safety_set_schedule_windows(w1s, w1e, w2s, w2e);
     ha_mqtt_publish_schedule_windows();
+    safety_apply_policy_now();
 }
 
 static void on_command_ota_url(const char* payload, int len) {
@@ -153,7 +156,7 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event) {
             snprintf(topic, sizeof(topic), "%s/schedule/enforce/set", s_base_topic); subscribe(topic, 1);
             const char* keys[] = {"w1_start","w1_end","w2_start","w2_end"};
             for (int i=0;i<4;i++) { snprintf(topic, sizeof(topic), "%s/schedule/%s/set", s_base_topic, keys[i]); subscribe(topic, 1);}            
-            snprintf(topic, sizeof(topic), "%s/ota/url/set", s_base_topic); subscribe(topic, 1);
+snprintf(topic, sizeof(topic), "%s/ota/url/set", s_base_topic); subscribe(topic, 1);
             snprintf(topic, sizeof(topic), "%s/ota/update", s_base_topic); subscribe(topic, 1);
             break; }
         case MQTT_EVENT_DISCONNECTED:
@@ -282,18 +285,237 @@ static void publish_discovery(void) {
         snprintf(stat_t, sizeof(stat_t), "%s/relay/%d/state", s_base_topic, ch);
 
         char payload[768];
-        snprintf(payload, sizeof(payload,
+        snprintf(payload, sizeof(payload),
             "{\"
-            \"name\":\"%s Relay %d\",
-            \"unique_id\":\"%s_relay%d\",
-            \"command_topic\":\"%s\",
-            \"state_topic\":\"%s\",
-            \"availability_topic\":\"%s\",
-            \"payload_available\":\"online\",
-            \"payload_not_available\":\"offline\",\"payload_on\":\"ON\",\"payload_off\":\"OFF\",
-            %s
-            "},
+              name\":\"%s Relay %d\",\
+              unique_id\":\"%s_relay%d\",\
+              command_topic\":\"%s\",\
+              state_topic\":\"%s\",\
+              availability_topic\":\"%s\",\
+              payload_available\":\"online\",\
+              payload_not_available\":\"offline\",\
+              payload_on\":\"ON\",\
+              payload_off\":\"OFF\",\
+              %s\
+            }",
             s_device_name, ch, s_device_id, ch, cmd_t, stat_t, s_availability_topic, dev);
         publish(topic, payload, 1, true);
     }
-    ...
+
+    // CO2 sensor
+    {
+        char topic[256];
+        snprintf(topic, sizeof(topic), "%s/sensor/%s/co2/config", s_ha_prefix, s_device_id);
+        char state_t[160];
+        snprintf(state_t, sizeof(state_t), "%s/scd41/co2", s_base_topic);
+        char payload[768], devb[256];
+        add_device_block(devb, sizeof(devb));
+        snprintf(payload, sizeof(payload),
+            "{\"
+              name\":\"%s CO2\",\
+              unique_id\":\"%s_co2\",\
+              state_topic\":\"%s\",\
+              availability_topic\":\"%s\",\
+              payload_available\":\"online\",\
+              payload_not_available\":\"offline\",\
+              unit_of_measurement\":\"ppm\",\
+              device_class\":\"carbon_dioxide\",\
+              state_class\":\"measurement\",\
+              %s\
+            }",
+            s_device_name, s_device_id, state_t, s_availability_topic, devb);
+        publish(topic, payload, 1, true);
+    }
+    // Temperature sensor
+    {
+        char topic[256];
+        snprintf(topic, sizeof(topic), "%s/sensor/%s/temperature/config", s_ha_prefix, s_device_id);
+        char state_t[160];
+        snprintf(state_t, sizeof(state_t), "%s/scd41/temperature", s_base_topic);
+        char payload[768], devb[256];
+        add_device_block(devb, sizeof(devb));
+        snprintf(payload, sizeof(payload),
+            "{\"
+              name\":\"%s Temperature\",\
+              unique_id\":\"%s_temperature\",\
+              state_topic\":\"%s\",\
+              availability_topic\":\"%s\",\
+              payload_available\":\"online\",\
+              payload_not_available\":\"offline\",\
+              unit_of_measurement\":\"°C\",\
+              device_class\":\"temperature\",\
+              state_class\":\"measurement\",\
+              %s\
+            }",
+            s_device_name, s_device_id, state_t, s_availability_topic, devb);
+        publish(topic, payload, 1, true);
+    }
+    // Humidity sensor
+    {
+        char topic[256];
+        snprintf(topic, sizeof(topic), "%s/sensor/%s/humidity/config", s_ha_prefix, s_device_id);
+        char state_t[160];
+        snprintf(state_t, sizeof(state_t), "%s/scd41/humidity", s_base_topic);
+        char payload[768], devb[256];
+        add_device_block(devb, sizeof(devb));
+        snprintf(payload, sizeof(payload),
+            "{\"
+              name\":\"%s Humidity\",\
+              unique_id\":\"%s_humidity\",\
+              state_topic\":\"%s\",\
+              availability_topic\":\"%s\",\
+              payload_available\":\"online\",\
+              payload_not_available\":\"offline\",\
+              unit_of_measurement\":\"%%\",\
+              device_class\":\"humidity\",\
+              state_class\":\"measurement\",\
+              %s\
+            }",
+            s_device_name, s_device_id, state_t, s_availability_topic, devb);
+        publish(topic, payload, 1, true);
+    }
+
+    // Away mode (switch)
+    {
+        char topic[256];
+        snprintf(topic, sizeof(topic), "%s/switch/%s/away/config", s_ha_prefix, s_device_id);
+        char cmd_t[160], stat_t[160];
+        snprintf(cmd_t, sizeof(cmd_t), "%s/mode/away/set", s_base_topic);
+        snprintf(stat_t, sizeof(stat_t), "%s/mode/away", s_base_topic);
+        char payload[768], devb[256];
+        add_device_block(devb, sizeof(devb));
+        snprintf(payload, sizeof(payload),
+            "{\"
+              name\":\"%s Away\",\
+              unique_id\":\"%s_away\",\
+              command_topic\":\"%s\",\
+              state_topic\":\"%s\",\
+              availability_topic\":\"%s\",\
+              payload_available\":\"online\",\
+              payload_not_available\":\"offline\",\
+              payload_on\":\"ON\",\
+              payload_off\":\"OFF\",\
+              %s\
+            }",
+            s_device_name, s_device_id, cmd_t, stat_t, s_availability_topic, devb);
+        publish(topic, payload, 1, true);
+    }
+
+    // Schedule enforce (switch)
+    {
+        char topic[256];
+        snprintf(topic, sizeof(topic), "%s/switch/%s/schedule_enforce/config", s_ha_prefix, s_device_id);
+        char cmd_t[160], stat_t[160];
+        snprintf(cmd_t, sizeof(cmd_t), "%s/schedule/enforce/set", s_base_topic);
+        snprintf(stat_t, sizeof(stat_t), "%s/schedule/enforce", s_base_topic);
+        char payload[768], devb[256];
+        add_device_block(devb, sizeof(devb));
+        snprintf(payload, sizeof(payload),
+            "{\"
+              name\":\"%s Schedule Enforce\",\
+              unique_id\":\"%s_sched_enf\",\
+              command_topic\":\"%s\",\
+              state_topic\":\"%s\",\
+              availability_topic\":\"%s\",\
+              payload_available\":\"online\",\
+              payload_not_available\":\"offline\",\
+              payload_on\":\"ON\",\
+              payload_off\":\"OFF\",\
+              %s\
+            }",
+            s_device_name, s_device_id, cmd_t, stat_t, s_availability_topic, devb);
+        publish(topic, payload, 1, true);
+    }
+
+    // Max-on minutes per relay (number)
+    for (int ch=1; ch<=4; ++ch) {
+        char topic[256];
+        snprintf(topic, sizeof(topic), "%s/number/%s/relay%d_max_on/config", s_ha_prefix, s_device_id, ch);
+        char cmd_t[160], stat_t[160];
+        snprintf(cmd_t, sizeof(cmd_t), "%s/relay/%d/max_on/set", s_base_topic, ch);
+        snprintf(stat_t, sizeof(stat_t), "%s/relay/%d/max_on", s_base_topic, ch);
+        char payload[768], devb[256];
+        add_device_block(devb, sizeof(devb));
+        snprintf(payload, sizeof(payload),
+            "{\"
+              name\":\"%s Relay %d Max ON (min)\",\
+              unique_id\":\"%s_relay%d_maxon\",\
+              command_topic\":\"%s\",\
+              state_topic\":\"%s\",\
+              availability_topic\":\"%s\",\
+              min\":0,\"max\":1440,\"step\":1,
+              mode\":\"box\",\
+              %s\
+            }",
+            s_device_name, ch, s_device_id, ch, cmd_t, stat_t, s_availability_topic, devb);
+        publish(topic, payload, 1, true);
+    }
+
+    // Schedule window numbers (minutes since midnight)
+    const char* keys[] = {"w1_start","w1_end","w2_start","w2_end"};
+    const char* names[] = {"Window1 Start","Window1 End","Window2 Start","Window2 End"};
+    for (int i=0;i<4;i++) {
+        char topic[256];
+        snprintf(topic, sizeof(topic), "%s/number/%s/%s/config", s_ha_prefix, s_device_id, keys[i]);
+        char cmd_t[192], stat_t[192];
+        snprintf(cmd_t, sizeof(cmd_t), "%s/schedule/%s/set", s_base_topic, keys[i]);
+        snprintf(stat_t, sizeof(stat_t), "%s/schedule/%s", s_base_topic, keys[i]);
+        char payload[768], devb[256];
+        add_device_block(devb, sizeof(devb));
+        snprintf(payload, sizeof(payload),
+            "{\"
+              name\":\"%s %s (min)\",\
+              unique_id\":\"%s_%s\",\
+              command_topic\":\"%s\",\
+              state_topic\":\"%s\",\
+              availability_topic\":\"%s\",\
+              min\":0,\"max\":1439,\"step\":1,
+              mode\":\"box\",\
+              %s\
+            }",
+            s_device_name, names[i], s_device_id, keys[i], cmd_t, stat_t, s_availability_topic, devb);
+        publish(topic, payload, 1, true);
+    }
+
+    // OTA URL (text)
+    {
+        char topic[256];
+        snprintf(topic, sizeof(topic), "%s/text/%s/ota_url/config", s_ha_prefix, s_device_id);
+        char cmd_t[160], stat_t[160];
+        snprintf(cmd_t, sizeof(cmd_t), "%s/ota/url/set", s_base_topic);
+        snprintf(stat_t, sizeof(stat_t), "%s/ota/url", s_base_topic);
+        char payload[768], devb[256];
+        add_device_block(devb, sizeof(devb));
+        snprintf(payload, sizeof(payload),
+            "{\"
+              name\":\"%s OTA URL\",\
+              unique_id\":\"%s_ota_url\",\
+              command_topic\":\"%s\",\
+              state_topic\":\"%s\",\
+              availability_topic\":\"%s\",\
+              %s\
+            }",
+            s_device_name, s_device_id, cmd_t, stat_t, s_availability_topic, devb);
+        publish(topic, payload, 1, true);
+    }
+
+    // OTA Update (button)
+    {
+        char topic[256];
+        snprintf(topic, sizeof(topic), "%s/button/%s/ota_update/config", s_ha_prefix, s_device_id);
+        char cmd_t[160];
+        snprintf(cmd_t, sizeof(cmd_t), "%s/ota/update", s_base_topic);
+        char payload[768], devb[256];
+        add_device_block(devb, sizeof(devb));
+        snprintf(payload, sizeof(payload),
+            "{\"
+              name\":\"%s OTA Update\",\
+              unique_id\":\"%s_ota_update\",\
+              command_topic\":\"%s\",\
+              availability_topic\":\"%s\",\
+              %s\
+            }",
+            s_device_name, s_device_id, cmd_t, s_availability_topic, devb);
+        publish(topic, payload, 1, true);
+    }
+}

@@ -6,40 +6,56 @@
 #include "freertos/task.h"
 #include "storage.h"
 #include "sdkconfig.h"
-#include "esp_system.h"
 #include <string.h>
-#include <stdio.h>
 
 static const char* TAG = "ota";
+static char s_url[256] = {0};
+
+void ota_init(void) {
+    // Load saved URL or default from Kconfig
+    storage_get_str("ota_url", s_url, sizeof(s_url), CONFIG_OTA_DEFAULT_URL);
+}
+
+void ota_set_url(const char* url) {
+    if (!url) url = "";
+    strncpy(s_url, url, sizeof(s_url)-1);
+    s_url[sizeof(s_url)-1] = 0;
+    storage_set_str("ota_url", s_url);
+}
+
+void ota_get_url(char* out, size_t out_sz) {
+    if (!out || !out_sz) return;
+    strncpy(out, s_url, out_sz - 1);
+    out[out_sz - 1] = 0;
+}
 
 static void ota_task(void* arg) {
     const char* url = (const char*)arg;
-    char stored[256] = {0};
-    if (!url || strlen(url) == 0) {
-        if (storage_get_ota_url(stored, sizeof(stored))) {
-            url = stored;
-        } else {
-            url = CONFIG_OTA_URL;
-        }
+    char local[256];
+    if (url && url[0]) {
+        strncpy(local, url, sizeof(local)-1);
+        local[sizeof(local)-1] = 0;
+    } else {
+        strncpy(local, s_url, sizeof(local)-1);
+        local[sizeof(local)-1] = 0;
     }
 
-    if (!url || strlen(url) == 0) {
+    if (!local[0]) {
         ESP_LOGE(TAG, "No OTA URL configured");
         vTaskDelete(NULL);
         return;
     }
 
-    ESP_LOGW(TAG, "Starting OTA from: %s", url);
+    ESP_LOGI(TAG, "Starting OTA from %s", local);
 
     esp_http_client_config_t http_cfg = {
-        .url = url,
-#if CONFIG_OTA_SKIP_CERT_VERIFY
-        .cert_pem = NULL,
-        .skip_cert_common_name_check = true,
+        .url = local,
+        .timeout_ms = 15000,
+#if CONFIG_OTA_USE_SERVER_CERT
+        .cert_pem = (const char*)CONFIG_OTA_SERVER_CERT_PEM,
 #else
-        .cert_pem = NULL, // set server cert here if needed
+        .cert_pem = NULL,
 #endif
-        .timeout_ms = 30 * 1000,
     };
     esp_https_ota_config_t ota_cfg = {
         .http_config = &http_cfg,
@@ -47,7 +63,7 @@ static void ota_task(void* arg) {
 
     esp_err_t ret = esp_https_ota(&ota_cfg);
     if (ret == ESP_OK) {
-        ESP_LOGW(TAG, "OTA successful, restarting...");
+        ESP_LOGI(TAG, "OTA successful, rebooting...");
         vTaskDelay(pdMS_TO_TICKS(1000));
         esp_restart();
     } else {
@@ -56,24 +72,7 @@ static void ota_task(void* arg) {
     vTaskDelete(NULL);
 }
 
-void ota_init(void) {
-    // nothing for now
-}
-
-void ota_set_url(const char* url) {
-    if (url && strlen(url)) {
-        storage_set_ota_url(url);
-        ESP_LOGI(TAG, "OTA URL saved");
-    }
-}
-
-void ota_get_url(char* buf, int buf_sz) {
-    if (!buf || buf_sz <= 0) return;
-    if (!storage_get_ota_url(buf, buf_sz)) {
-        snprintf(buf, buf_sz, "%s", CONFIG_OTA_URL);
-    }
-}
-
-void ota_trigger(const char* url_opt) {
-    xTaskCreatePinnedToCore(ota_task, "ota_task", 8192, (void*)url_opt, 5, NULL, tskNO_AFFINITY);
+esp_err_t ota_trigger(const char* url_or_null) {
+    BaseType_t ok = xTaskCreate(ota_task, "ota_task", 8192, (void*)url_or_null, 5, NULL);
+    return ok == pdPASS ? ESP_OK : ESP_FAIL;
 }
